@@ -60,7 +60,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "lpc21xx.h"
-
+#include "semphr.h"
 /* Peripheral includes. */
 #include "serial.h"
 #include "GPIO.h"
@@ -73,13 +73,35 @@
 
 /* Constants for the ComTest demo application tasks. */
 #define mainCOM_TEST_BAUD_RATE	( ( unsigned long ) 115200 )
+	
 
+
+/*Task Periods*/
+#define Button_1_Monitor_Period  50
+#define Button_2_Monitor_Period  50
+#define Periodic_Transmitter_period 100
+#define Uart_Receiver_period 20
+#define Load_1_Simulation_period 10
+#define Load_2_Simulation_period 100
+
+/*Task Handlers*/
 TaskHandle_t Button_1_Monitor_handler = NULL;
 TaskHandle_t Button_2_Monitor_handler = NULL;
 TaskHandle_t Periodic_Transmitter_handler = NULL;
 TaskHandle_t Uart_Receiver_handler = NULL;
+TaskHandle_t Load_1_Simulation_handler=NULL;
+TaskHandle_t Load_2_Simulation_handler=NULL;
 
+/*Variables for Task Analysis*/
+const signed char Tx_Buf[15] = "Hello_EgFWD";
 
+signed char Rx_Buf[15];
+char runTimeStatsBuff[200];
+int T1_TxStamp = 0, T1_TyStamp = 0, T1_totalTime=0;
+int T2_TxStamp = 0, T2_TyStamp = 0, T2_totalTime=0;
+int system_time = 0;
+int cpu_load = 0;
+volatile int misses=0;
 /*
  * Configure the processor for use with the Keil demo board.  This is very
  * minimal as most of the setup is managed by the settings in the project
@@ -89,18 +111,19 @@ static void prvSetupHardware( void );
 /*-----------------------------------------------------------*/
 /* Task to be created. */
 
-    pinState_t button_state;
+pinState_t button_state;
+
+
 void Button_1_Monitor( void * pvParameters )
 {
-
+  TickType_t xLastWakeTime= xTaskGetTickCount();
+	vTaskSetApplicationTaskTag(NULL,(void *) 3);
     for( ;; )
     {
         /* Task code goes here. */
 			
-			
-	button_state=GPIO_read(PORT_0,PIN0);
-	
-	vTaskDelay( 100 );
+			vTaskGetRunTimeStats( runTimeStatsBuff );
+	    vTaskDelayUntil(&xLastWakeTime,50);
 	
 			
     }
@@ -108,35 +131,112 @@ void Button_1_Monitor( void * pvParameters )
 void Button_2_Monitor( void * pvParameters )
 {
     
-
+ TickType_t xLastWakeTime= xTaskGetTickCount();
+	vTaskSetApplicationTaskTag(NULL,(void *) 4);
     for( ;; )
     {
         /* Task code goes here. */
-			if(button_state == PIN_IS_HIGH)
-			
-				
-			{
-			GPIO_write(PORT_0,PIN1,PIN_IS_HIGH);
-			}
-			else
-				
-	
-		{
-		GPIO_write(PORT_0,PIN1,PIN_IS_LOW);
+			vTaskGetRunTimeStats( runTimeStatsBuff );
+		vTaskDelayUntil(&xLastWakeTime,50);
 		}
 			
 			
 	
-	vTaskDelay( 200 );
+
 	
 			
-    }
 }
 void Periodic_Transmitter ( void * pvParameters )
-{}
-void Uart_Receiver ( void * pvParameters )
-{}
+{
+	TickType_t xLastWakeTime= xTaskGetTickCount();
+	vTaskSetApplicationTaskTag(NULL,(void *) 5);
+    for( ;; )
+    {
+        /* Task code goes here. */
+			vTaskGetRunTimeStats( runTimeStatsBuff );
+			vSerialPutString(Tx_Buf, 15);
+			GPIO_write(PORT_0, PIN6, PIN_IS_LOW);
+			vTaskDelayUntil( &xLastWakeTime, 100 );
+			GPIO_write(PORT_0, PIN6, PIN_IS_HIGH);
+		}
+			
+			
 
+}
+void Uart_Receiver ( void * pvParameters )
+{
+	 TickType_t xLastWakeTime= xTaskGetTickCount();
+	vTaskSetApplicationTaskTag(NULL,(void *) 6);
+    for( ;; )
+    {
+      vTaskGetRunTimeStats( runTimeStatsBuff );
+			
+			xSerialGetChar(Rx_Buf);
+
+			GPIO_write(PORT_0, PIN7, PIN_IS_LOW);
+			vTaskDelayUntil( &xLastWakeTime, 20 );
+			GPIO_write(PORT_0, PIN7, PIN_IS_HIGH);
+		}
+			
+			
+}
+void Load_1_Simulation (void * pvParameters)
+{
+	int i=0;
+	TickType_t xLastWakeTime= xTaskGetTickCount();
+	vTaskSetApplicationTaskTag(NULL,(void *) 1);//1 is voltage scale pxTaskTag=2, Null is current task
+    for( ;; )
+    {
+        /* Task code goes here. */
+			/*execution time 5 ms*/
+			for(i=0;i<2000;i++)
+			{
+				i=i;
+				
+				GPIO_write(PORT_0, PIN3, PIN_IS_HIGH);
+				GPIO_write(PORT_0, PIN2, PIN_IS_LOW);
+				GPIO_write(PORT_0, PIN4, PIN_IS_LOW);
+				
+			}
+			vTaskGetRunTimeStats(runTimeStatsBuff);//save run time stats in buf
+			
+			vTaskDelayUntil(&xLastWakeTime,10);
+			//xSerialPutChar('\n');
+			//vSerialPutString((const signed char *)runTimeStatsBuff,200);
+				
+	
+		}
+
+}
+void Load_2_Simulation (void * pvParameters)
+{
+	int i=0;
+	TickType_t xLastWakeTime= xTaskGetTickCount();
+	vTaskSetApplicationTaskTag(NULL,(void *) 1);//1 is voltage scale pxTaskTag=2, Null is current task
+    for( ;; )
+    {
+        /* Task code goes here. */
+			/*execution time 12 ms*/
+			for(i=0;i<4000;i++)
+			{
+				i=i;
+				
+				GPIO_write(PORT_0, PIN4, PIN_IS_HIGH);
+				GPIO_write(PORT_0, PIN2, PIN_IS_LOW);
+				GPIO_write(PORT_0, PIN3, PIN_IS_LOW);
+		
+			}
+			
+			vTaskGetRunTimeStats(runTimeStatsBuff);//save run time stats in buf
+			
+	    vTaskDelayUntil(&xLastWakeTime,100);
+			
+				
+		}
+
+}
+	
+	
 /*
  * Application entry point:
  * Starts all the other tasks, then starts the scheduler. 
@@ -154,7 +254,7 @@ xTaskPeriodicCreate(
                     100,      /* Stack size in words, not bytes. */
                     ( void * ) 0,    /* Parameter passed into the task. */
                     1,/* Priority at which the task is created. */
-                    &Button_1_Monitor_handler, 50);      /* Used to pass out the created task's handle. */
+                    &Button_1_Monitor_handler, Button_1_Monitor_Period);      /* Used to pass out the created task's handle. */
 										
 										   /* Create Tasks here */
 xTaskPeriodicCreate(
@@ -163,22 +263,36 @@ xTaskPeriodicCreate(
                     100,      /* Stack size in words, not bytes. */
                     ( void * ) 0,    /* Parameter passed into the task. */
                     1,/* Priority at which the task is created. */
-                    &Button_2_Monitor_handler,50 );      /* Used to pass out the created task's handle. */
+                    &Button_2_Monitor_handler,Button_2_Monitor_Period );      /* Used to pass out the created task's handle. */
 xTaskPeriodicCreate(
                     Periodic_Transmitter,       /* Function that implements the task. */
                     "Periodic_Transmitter",          /* Text name for the task. */
                     100,      /* Stack size in words, not bytes. */
                     ( void * ) 0,    /* Parameter passed into the task. */
                     1,/* Priority at which the task is created. */
-                    &Periodic_Transmitter_handler,100 );      /* Used to pass out the created task's handle. */									
+                    &Periodic_Transmitter_handler,Periodic_Transmitter_period );      /* Used to pass out the created task's handle. */									
 xTaskPeriodicCreate(
                     Uart_Receiver,       /* Function that implements the task. */
                     "Uart_Receiver",          /* Text name for the task. */
                     100,      /* Stack size in words, not bytes. */
                     ( void * ) 0,    /* Parameter passed into the task. */
                     1,/* Priority at which the task is created. */
-                    &Uart_Receiver_handler,20 );      /* Used to pass out the created task's handle. */
-
+                    &Uart_Receiver_handler,Uart_Receiver_period );      /* Used to pass out the created task's handle. */
+										
+xTaskPeriodicCreate(
+                    Load_1_Simulation,       /* Function that implements the task. */
+                    "Load_1_Simulation",          /* Text name for the task. */
+                    100,      /* Stack size in words, not bytes. */
+                    ( void * ) 0,    /* Parameter passed into the task. */
+                    1,/* Priority at which the task is created. */
+                    &Load_1_Simulation_handler,Load_1_Simulation_period );      /* Used to pass out the created task's handle. */
+xTaskPeriodicCreate(
+                    Load_2_Simulation,       /* Function that implements the task. */
+                    "Load_2_Simulation",          /* Text name for the task. */
+                    100,      /* Stack size in words, not bytes. */
+                    ( void * ) 0,    /* Parameter passed into the task. */
+                    1,/* Priority at which the task is created. */
+                    &Load_2_Simulation_handler,Load_2_Simulation_period );      /* Used to pass out the created task's handle. */
 
 	/* Now all the tasks have been started - start the scheduler.
 
@@ -194,7 +308,21 @@ xTaskPeriodicCreate(
 	for( ;; );
 }
 /*-----------------------------------------------------------*/
+void vApplicationTickHook( void )
+{
+	GPIO_write(PORT_0, PIN5, PIN_IS_HIGH);
+	
+	GPIO_write(PORT_0, PIN5, PIN_IS_LOW);
+	
 
+}
+void vApplicationIdleHook( void )
+{
+	
+	GPIO_write(PORT_0, PIN2, PIN_IS_HIGH);
+	GPIO_write(PORT_0, PIN3, PIN_IS_LOW);
+	GPIO_write(PORT_0, PIN4, PIN_IS_LOW);
+}
 /* Function to reset timer 1 */
 void timer1Reset(void)
 {
