@@ -29,6 +29,7 @@
 #define FREERTOS_CONFIG_H
 
 #include <lpc21xx.h>
+#include "GPIO.h"
 
 /*-----------------------------------------------------------
  * Application specific definitions.
@@ -43,27 +44,27 @@
  *----------------------------------------------------------*/
 
 #define configUSE_PREEMPTION		1 /*EDIT TO 1*/
-#define configUSE_IDLE_HOOK			1
-#define configUSE_TICK_HOOK			1
+#define configUSE_IDLE_HOOK			1 /*EDIT TO 1*/
+#define configUSE_TICK_HOOK			1 /*EDIT TO 1*/
 #define configCPU_CLOCK_HZ			( ( unsigned long ) 60000000 )	/* =12.0MHz xtal multiplied by 5 using the PLL. */
 #define configTICK_RATE_HZ			( ( TickType_t ) 1000 )/*every 1 sec*/
 #define configMAX_PRIORITIES		( 4 ) /*not how many task but priority only*/
 #define configMINIMAL_STACK_SIZE	( ( unsigned short ) 90 )
 #define configTOTAL_HEAP_SIZE		( ( size_t ) 13 * 1024 )
 #define configMAX_TASK_NAME_LEN		( 8 )
-#define configUSE_TRACE_FACILITY	0
 #define configUSE_16_BIT_TICKS		0
 #define configQUEUE_REGISTRY_SIZE 	0
 #define configUse_TIME_SLICING 0
 #define configUSE_APPLICATION_TASK_SIZE 0
 #define configUSE_MUTEX 0
-
+#define configUSE_TRACE_FACILITY	1 /*for run time stats*/
 
 
 #define configUSE_EDF_SCHEDULER  1 /*EDF scheduler*/
-#define configIDLE_SHOULD_YIELD		1 /*IF TASK HAS SAME PERIODICITY OF IDLE TASK*/
+#define configIDLE_SHOULD_YIELD		1 /*IF TASK HAS SAME PERIODICITY OF IDLE TASK*/ /*0  to avoid */
 #define configSUPPORT_DYNAMIC_ALLOCATION  1
 
+#define tskIDLE_STACK_SIZE (( unsigned short )2)//bytes
 
 /* Co-routine definitions. */
 #define configUSE_CO_ROUTINES 		0
@@ -79,6 +80,62 @@ to exclude the API function. */
 #define INCLUDE_vTaskSuspend			1
 #define INCLUDE_vTaskDelayUntil			1
 #define INCLUDE_vTaskDelay				1
+
+
+
+
+/*configure run time stats*/
+#define configUSE_STATS_FORMATTING_FUNCTIONS 	1 /* to use vTaskGetRunTimeStats() */
+#define configGENERATE_RUN_TIME_STATS  1
+#define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS()
+#define portGET_RUN_TIME_COUNTER_VALUE() (T1TC)
+#define configUSE_APPLICATION_TASK_TAG 1
+
+/* Tasks Time */
+
+extern int T1_TxStamp, T1_TyStamp, T1_totalTime;
+extern int T2_TxStamp, T2_TyStamp, T2_totalTime;
+extern int system_time;
+extern int cpu_load;
+
+
+/*Trace Hooks*/
+
+/*Called before a new task is selected to run. At this point pxCurrentTCB contains the handle of the task about to leave the Running state*/
+
+#define traceTASK_SWITCHED_OUT()		do\
+																		{\
+																				if((int)pxCurrentTCB->pxTaskTag == 1)\
+																				{\
+																					GPIO_write(PORT_0, PIN2, PIN_IS_LOW);\
+																					T1_TyStamp = T1TC;\
+																					T1_totalTime += (T1_TyStamp - T1_TxStamp);\
+																				}\
+																				else if((int)pxCurrentTCB->pxTaskTag == 2)\
+																				{\
+																					GPIO_write(PORT_0, PIN3, PIN_IS_LOW);\
+																					T2_TyStamp = T1TC;\
+																					T2_totalTime += (T2_TyStamp - T2_TxStamp);\
+																				}\
+																					system_time = T1TC;\
+																				  cpu_load = ((T1_totalTime+T2_totalTime)/(float)system_time) * 100;\
+																		}while(0)
+																		
+/*Called after a task has been selected to run. At this point pxCurrentTCB contains the handle of the task about to enter the Running state.*/																		
+#define traceTASK_SWITCHED_IN()			do\
+																		{\
+																				if((int)pxCurrentTCB->pxTaskTag == 1)\
+																				{\
+																					GPIO_write(PORT_0, PIN2, PIN_IS_HIGH);\
+																					T1_TxStamp = T1TC;\
+																				}\
+																				else if((int)pxCurrentTCB->pxTaskTag == 2)\
+																				{\
+																					GPIO_write(PORT_0, PIN3, PIN_IS_HIGH);\
+																					T2_TxStamp = T1TC;\
+																				}\
+																		}while(0)
+
 
 
 
